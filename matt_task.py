@@ -110,8 +110,8 @@ st.header("Existing tickets")
 st.write(f"Number of tickets: `{len(st.session_state.df)}`")
 
 st.info(
-    "You can edit the tickets by double clicking on a cell. "
-    "After editing, the updates will be saved back to GitHub when you press 'Save Tickets'.",
+    "You can edit the tickets by double clicking on a cell, or delete rows directly. "
+    "After editing/deleting, press **Save Tickets** to persist changes back to GitHub.",
     icon="✍️",
 )
 
@@ -119,6 +119,7 @@ edited_df = st.data_editor(
     st.session_state.df,
     use_container_width=True,
     hide_index=True,
+    num_rows="dynamic",  # 👈 allows adding/removing rows
     column_config={
         "Status": st.column_config.SelectboxColumn(
             "Status", options=["Open", "In Progress", "Closed"], required=True
@@ -130,10 +131,11 @@ edited_df = st.data_editor(
     disabled=["ID", "Date Submitted"],
 )
 
-# Button to persist edits
+# Button to persist edits (including deletions)
 if st.button("Save Tickets"):
     st.session_state.df = edited_df
     save_tickets(st.session_state.df)
+    st.success("Changes saved to GitHub ✅")
 
 # ----------------------------
 # Stats
