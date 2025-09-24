@@ -2,36 +2,86 @@ import datetime
 import pandas as pd
 import streamlit as st
 import altair as alt
+import base64
+import requests
+import io
 
-# Show app title and description.
+# ----------------------------
+# GitHub API Helpers
+# ----------------------------
+TOKEN = st.secrets["GITHUB_TOKEN"]
+REPO = st.secrets["GITHUB_REPO"]  # e.g. "username/reponame"
+FILEPATH = st.secrets["GITHUB_FILEPATH"]  # e.g. "tickets.csv"
+BRANCH = "main"  # change if your repo uses "master"
+
+def get_file_info():
+    url = f"https://api.github.com/repos/{REPO}/contents/{FILEPATH}?ref={BRANCH}"
+    headers = {"Authorization": f"token {TOKEN}"}
+    r = requests.get(url, headers=headers)
+    if r.status_code == 200:
+        return r.json()  # contains sha + content
+    elif r.status_code == 404:
+        return None
+    else:
+        st.error(f"GitHub error: {r.json()}")
+        return None
+
+def load_tickets():
+    info = get_file_info()
+    if info and "content" in info:
+        content = base64.b64decode(info["content"]).decode("utf-8")
+        return pd.read_csv(io.StringIO(content))
+    # fallback empty DataFrame
+    return pd.DataFrame(columns=["ID","Issue","Status","Priority","Date Submitted"])
+
+def save_tickets(df):
+    csv_bytes = df.to_csv(index=False).encode("utf-8")
+    b64 = base64.b64encode(csv_bytes).decode("utf-8")
+    info = get_file_info()
+    sha = info["sha"] if info else None
+
+    url = f"https://api.github.com/repos/{REPO}/contents/{FILEPATH}"
+    headers = {"Authorization": f"token {TOKEN}"}
+    data = {
+        "message": "Update tickets.csv from Streamlit app",
+        "content": b64,
+        "branch": BRANCH,
+    }
+    if sha:
+        data["sha"] = sha
+
+    r = requests.put(url, headers=headers, json=data)
+    if r.status_code not in (200,201):
+        st.error(f"GitHub save failed: {r.json()}")
+    else:
+        st.success("Tickets saved to GitHub 🚀")
+
+
+# ----------------------------
+# Streamlit UI
+# ----------------------------
 st.set_page_config(page_title="Tasks", page_icon="🎫")
 st.title("Tasks")
-st.write(
-    """
-    Matt's Task Ticketing
-    """
-)
+st.write("Matt's Task Ticketing")
 
-# Initialize an empty dataframe if not already in session_state.
+# Load tickets from GitHub into session state
 if "df" not in st.session_state:
-    st.session_state.df = pd.DataFrame(
-        columns=["ID", "Issue", "Status", "Priority", "Date Submitted"]
-    )
+    st.session_state.df = load_tickets()
 
-# Show a section to add a new ticket.
+# ----------------------------
+# Add ticket form
+# ----------------------------
 st.header("Add a ticket")
-
 with st.form("add_ticket_form"):
     issue = st.text_area("Describe the tasks")
     priority = st.selectbox("Priority", ["High", "Medium", "Low"])
     submitted = st.form_submit_button("Submit")
 
 if submitted:
-    # Generate a new ticket ID based on current tickets
     if len(st.session_state.df) > 0:
         recent_ticket_number = int(max(st.session_state.df.ID).split("-")[1])
     else:
-        recent_ticket_number = 1000  # starting point if no tickets yet
+        recent_ticket_number = 1000
 
     today = datetime.datetime.now().strftime("%m-%d-%Y")
     df_new = pd.DataFrame(
@@ -50,13 +100,18 @@ if submitted:
     st.dataframe(df_new, use_container_width=True, hide_index=True)
     st.session_state.df = pd.concat([df_new, st.session_state.df], axis=0)
 
-# Show section to view and edit existing tickets in a table.
+    # Save to GitHub
+    save_tickets(st.session_state.df)
+
+# ----------------------------
+# Existing tickets
+# ----------------------------
 st.header("Existing tickets")
 st.write(f"Number of tickets: `{len(st.session_state.df)}`")
 
 st.info(
-    "You can edit the tickets by double clicking on a cell. Note how the plots below "
-    "update automatically! You can also sort the table by clicking on the column headers.",
+    "You can edit the tickets by double clicking on a cell. "
+    "After editing, the updates will be saved back to GitHub when you press 'Save Tickets'.",
     icon="✍️",
 )
 
@@ -66,35 +121,34 @@ edited_df = st.data_editor(
     hide_index=True,
     column_config={
         "Status": st.column_config.SelectboxColumn(
-            "Status",
-            help="Ticket status",
-            options=["Open", "In Progress", "Closed"],
-            required=True,
+            "Status", options=["Open", "In Progress", "Closed"], required=True
         ),
         "Priority": st.column_config.SelectboxColumn(
-            "Priority",
-            help="Priority",
-            options=["High", "Medium", "Low"],
-            required=True,
+            "Priority", options=["High", "Medium", "Low"], required=True
         ),
     },
     disabled=["ID", "Date Submitted"],
 )
 
-# Show some metrics and charts about the tickets.
-st.header("Statistics")
+# Button to persist edits
+if st.button("Save Tickets"):
+    st.session_state.df = edited_df
+    save_tickets(st.session_state.df)
 
+# ----------------------------
+# Stats
+# ----------------------------
+st.header("Statistics")
 col1, col2, col3 = st.columns(3)
 num_open_tickets = len(st.session_state.df[st.session_state.df.Status == "Open"])
-col1.metric(label="Number of open tickets", value=num_open_tickets, delta=0)
-col2.metric(label="First response time (hours)", value=0, delta=0)
-col3.metric(label="Average resolution time (hours)", value=0, delta=0)
+col1.metric("Number of open tickets", num_open_tickets, delta=0)
+col2.metric("First response time (hours)", 0, delta=0)
+col3.metric("Average resolution time (hours)", 0, delta=0)
 
-# Show charts only if tickets exist
-if len(edited_df) > 0:
+if len(st.session_state.df) > 0:
     st.write("##### Ticket status per month")
     status_plot = (
-        alt.Chart(edited_df)
+        alt.Chart(st.session_state.df)
         .mark_bar()
         .encode(
             x="month(Date Submitted):O",
@@ -102,20 +156,14 @@ if len(edited_df) > 0:
             xOffset="Status:N",
             color="Status:N",
         )
-        .configure_legend(
-            orient="bottom", titleFontSize=14, labelFontSize=14, titlePadding=5
-        )
     )
     st.altair_chart(status_plot, use_container_width=True, theme="streamlit")
 
     st.write("##### Current ticket priorities")
     priority_plot = (
-        alt.Chart(edited_df)
+        alt.Chart(st.session_state.df)
         .mark_arc()
         .encode(theta="count():Q", color="Priority:N")
         .properties(height=300)
-        .configure_legend(
-            orient="bottom", titleFontSize=14, labelFontSize=14, titlePadding=5
-        )
     )
     st.altair_chart(priority_plot, use_container_width=True, theme="streamlit")
