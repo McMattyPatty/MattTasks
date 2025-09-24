@@ -4,7 +4,7 @@ import streamlit as st
 import altair as alt
 
 # Show app title and description.
-st.set_page_config(page_title="Support tickets", page_icon="🎫")
+st.set_page_config(page_title="Tasks", page_icon="🎫")
 st.title("Tasks")
 st.write(
     """
