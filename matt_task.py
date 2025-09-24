@@ -8,9 +8,7 @@ st.set_page_config(page_title="Tasks", page_icon="🎫")
 st.title("Tasks")
 st.write(
     """
-    This app shows how you can build an internal tool in Streamlit. Here, we are 
-    implementing a support ticket workflow. The user can create a ticket, edit 
-    existing tickets, and view some statistics.
+    Matt's Task Ticketing
     """
 )
 
