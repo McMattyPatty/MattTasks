@@ -15,7 +15,7 @@ st.write(
 # Initialize an empty dataframe if not already in session_state.
 if "df" not in st.session_state:
     st.session_state.df = pd.DataFrame(
-        columns=["ID", "Task", "Status", "Priority", "Date Submitted"]
+        columns=["ID", "Issue", "Status", "Priority", "Date Submitted"]
     )
 
 # Show a section to add a new ticket.
