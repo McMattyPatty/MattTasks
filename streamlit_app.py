@@ -1,10 +1,7 @@
 import datetime
-import random
-
-import altair as alt
-import numpy as np
 import pandas as pd
 import streamlit as st
+import altair as alt
 
 # Show app title and description.
 st.set_page_config(page_title="Support tickets", page_icon="🎫")
@@ -17,21 +14,27 @@ st.write(
     """
 )
 
+# Initialize an empty dataframe if not already in session_state.
+if "df" not in st.session_state:
+    st.session_state.df = pd.DataFrame(
+        columns=["ID", "Issue", "Status", "Priority", "Date Submitted"]
+    )
 
 # Show a section to add a new ticket.
 st.header("Add a ticket")
 
-# We're adding tickets via an `st.form` and some input widgets. If widgets are used
-# in a form, the app will only rerun once the submit button is pressed.
 with st.form("add_ticket_form"):
     issue = st.text_area("Describe the issue")
     priority = st.selectbox("Priority", ["High", "Medium", "Low"])
     submitted = st.form_submit_button("Submit")
 
 if submitted:
-    # Make a dataframe for the new ticket and append it to the dataframe in session
-    # state.
-    recent_ticket_number = int(max(st.session_state.df.ID).split("-")[1])
+    # Generate a new ticket ID based on current tickets
+    if len(st.session_state.df) > 0:
+        recent_ticket_number = int(max(st.session_state.df.ID).split("-")[1])
+    else:
+        recent_ticket_number = 1000  # starting point if no tickets yet
+
     today = datetime.datetime.now().strftime("%m-%d-%Y")
     df_new = pd.DataFrame(
         [
@@ -45,7 +48,6 @@ if submitted:
         ]
     )
 
-    # Show a little success message.
     st.write("Ticket submitted! Here are the ticket details:")
     st.dataframe(df_new, use_container_width=True, hide_index=True)
     st.session_state.df = pd.concat([df_new, st.session_state.df], axis=0)
@@ -60,8 +62,6 @@ st.info(
     icon="✍️",
 )
 
-# Show the tickets dataframe with `st.data_editor`. This lets the user edit the table
-# cells. The edited data is returned as a new dataframe.
 edited_df = st.data_editor(
     st.session_state.df,
     use_container_width=True,
@@ -80,46 +80,44 @@ edited_df = st.data_editor(
             required=True,
         ),
     },
-    # Disable editing the ID and Date Submitted columns.
     disabled=["ID", "Date Submitted"],
 )
 
-# Show some metrics and charts about the ticket.
+# Show some metrics and charts about the tickets.
 st.header("Statistics")
 
-# Show metrics side by side using `st.columns` and `st.metric`.
 col1, col2, col3 = st.columns(3)
 num_open_tickets = len(st.session_state.df[st.session_state.df.Status == "Open"])
-col1.metric(label="Number of open tickets", value=num_open_tickets, delta=10)
-col2.metric(label="First response time (hours)", value=5.2, delta=-1.5)
-col3.metric(label="Average resolution time (hours)", value=16, delta=2)
+col1.metric(label="Number of open tickets", value=num_open_tickets, delta=0)
+col2.metric(label="First response time (hours)", value=0, delta=0)
+col3.metric(label="Average resolution time (hours)", value=0, delta=0)
 
-# Show two Altair charts using `st.altair_chart`.
-st.write("")
-st.write("##### Ticket status per month")
-status_plot = (
-    alt.Chart(edited_df)
-    .mark_bar()
-    .encode(
-        x="month(Date Submitted):O",
-        y="count():Q",
-        xOffset="Status:N",
-        color="Status:N",
+# Show charts only if tickets exist
+if len(edited_df) > 0:
+    st.write("##### Ticket status per month")
+    status_plot = (
+        alt.Chart(edited_df)
+        .mark_bar()
+        .encode(
+            x="month(Date Submitted):O",
+            y="count():Q",
+            xOffset="Status:N",
+            color="Status:N",
+        )
+        .configure_legend(
+            orient="bottom", titleFontSize=14, labelFontSize=14, titlePadding=5
+        )
     )
-    .configure_legend(
-        orient="bottom", titleFontSize=14, labelFontSize=14, titlePadding=5
-    )
-)
-st.altair_chart(status_plot, use_container_width=True, theme="streamlit")
+    st.altair_chart(status_plot, use_container_width=True, theme="streamlit")
 
-st.write("##### Current ticket priorities")
-priority_plot = (
-    alt.Chart(edited_df)
-    .mark_arc()
-    .encode(theta="count():Q", color="Priority:N")
-    .properties(height=300)
-    .configure_legend(
-        orient="bottom", titleFontSize=14, labelFontSize=14, titlePadding=5
+    st.write("##### Current ticket priorities")
+    priority_plot = (
+        alt.Chart(edited_df)
+        .mark_arc()
+        .encode(theta="count():Q", color="Priority:N")
+        .properties(height=300)
+        .configure_legend(
+            orient="bottom", titleFontSize=14, labelFontSize=14, titlePadding=5
+        )
     )
-)
-st.altair_chart(priority_plot, use_container_width=True, theme="streamlit")
+    st.altair_chart(priority_plot, use_container_width=True, theme="streamlit")
