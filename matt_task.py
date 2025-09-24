@@ -15,14 +15,14 @@ st.write(
 # Initialize an empty dataframe if not already in session_state.
 if "df" not in st.session_state:
     st.session_state.df = pd.DataFrame(
-        columns=["ID", "Issue", "Status", "Priority", "Date Submitted"]
+        columns=["ID", "Task", "Status", "Priority", "Date Submitted"]
     )
 
 # Show a section to add a new ticket.
 st.header("Add a ticket")
 
 with st.form("add_ticket_form"):
-    issue = st.text_area("Describe the issue")
+    issue = st.text_area("Describe the tasks")
     priority = st.selectbox("Priority", ["High", "Medium", "Low"])
     submitted = st.form_submit_button("Submit")
 
